@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 
 	"github.com/CloudyKit/jet/v6"
 	"github.com/gorilla/websocket"
@@ -49,9 +50,10 @@ var upgradeConnection = websocket.Upgrader{
 }
 
 type WsJsonResponse struct {
-	Action      string `json:"action"`
-	Message     string `json:"message"`
-	MessageType string `json:"message_type"`
+	Action         string   `json:"action"`
+	Message        string   `json:"message"`
+	MessageType    string   `json:"message_type"`
+	ConnectedUsers []string `json:"connected_users"`
 }
 
 type WsPayload struct {
@@ -93,7 +95,7 @@ func ListenForWs(conn *WebSocketConnection) {
 	var payload WsPayload
 	for {
 		err := conn.ReadJSON(&payload)
-		
+
 		if err == nil {
 			payload.Conn = *conn
 			wsChan <- payload
@@ -107,10 +109,33 @@ func ListenToWsChan() {
 	for {
 		evt := <-wsChan
 
-		response.Action = "Got here"
-		response.Message = fmt.Sprintf("Message with event: %s", evt.Action)
+		switch evt.Action {
+		case "username":
+			clients[evt.Conn] = evt.Username
+			response.Action = "list_users"
+		case "left":
+			response.Action = "list_users"
+			delete(clients, evt.Conn)
+		case "message":
+			response.Action = "message"
+			response.Message = fmt.Sprintf("<strong>%s</strong>: %s", evt.Username, evt.Message)
+		}
+
+		users := getUserList()
+		response.ConnectedUsers = users
 		broadCastToAll(response)
 	}
+}
+
+func getUserList() []string {
+	var userList []string
+	for _, c := range clients {
+		if c != "" {
+			userList = append(userList, c)
+		}
+	}
+	sort.Strings(userList)
+	return userList
 }
 
 func broadCastToAll(response WsJsonResponse) {

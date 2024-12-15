@@ -40,6 +40,7 @@
                         <input type="text" name="message" id="message" class="form-control" autocomplete="off">
                     </div>
                     
+                    <a href="javascript:void(0);" id="btn" class="btn btn-outline-secondary mt-3">Send Message</a>
                     <input type="hidden" name="action" id="action">
                     <hr>
                     <div class="chatbox mt-3" id="output"></div>
@@ -47,7 +48,7 @@
 
                 <div class="col-md-4">
                     <h3>Who's online</h3>
-                     
+                     <ul id="online_users"></ul>
                 </div>
 
             </div>
@@ -57,6 +58,13 @@
 
     <script>
         let socket = null;
+        let chatbox = document.getElementById("output");
+
+        window.onbeforeunload = function(){
+            let jsonData = {};
+            jsonData["action"] = "left";
+            socket.send(JSON.stringify(jsonData));
+        }
 
         document.addEventListener("DOMContentLoaded", function(){
             // Inicializa o WebSocket quando a página é carregada
@@ -64,12 +72,33 @@
 
             // Função de callback para quando a conexão é estabelecida com sucesso
             socket.onopen = () => {
-                console.log("WebSocket connection successful");
+                
             };
 
             // Função de callback para mensagens recebidas pelo WebSocket
             socket.onmessage = (event) => {
-                console.log("Message from server:", event);
+                let data = JSON.parse(event.data);
+                console.log(data);
+                switch(data.action){
+                    
+                    case "list_users":
+                        let ul = document.getElementById("online_users");
+                        while(ul.firstChild){
+                            ul.removeChild(ul.firstChild);
+                        }
+                        if(data.connected_users.length > 0){
+                            data.connected_users.forEach(function(item){
+                                let li = document.createElement("li");
+                                li.appendChild(document.createTextNode(item));
+                                ul.appendChild(li);
+                            })
+                        }
+                        break;
+                    case "message":
+                        chatbox.innerHTML = chatbox.innerHTML + data.message + "<br>"; 
+                        break;
+                }
+
             };
 
             // Função de callback para lidar com erros na conexão WebSocket
@@ -81,7 +110,46 @@
             socket.onclose = (event) => {
                 console.log("WebSocket connection closed:", event);
             };
+
+            // obtem entrada do usuario 
+            let userInput = document.getElementById("username");
+            userInput.addEventListener("change", function (){
+                let jsonData = {};
+                jsonData["action"] = "username";
+                jsonData["username"] = this.value;
+
+                socket.send(JSON.stringify(jsonData));
+            });
+
+            document.getElementById("message").addEventListener("keydown", function(event){
+                console.log(event);
+                if(event.code === "Enter" ){
+                    
+                    if(!socket) return false;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    sendMessage();
+
+                }
+            });
+
+            document.getElementById("btn").addEventListener("click", function(){
+                if(document.getElementById("username") != "" && document.getElementById("message") != ""){
+                    sendMessage();
+                }
+            })
+
+            
         });
+
+        function sendMessage(){
+            let jsonData = {};
+            jsonData["action"] = "message";
+            jsonData["username"] = document.getElementById("username").value;
+            jsonData["message"] = document.getElementById("message").value;
+            socket.send(JSON.stringify(jsonData));
+            document.getElementById("message").value = "";
+        }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
